@@ -1,0 +1,81 @@
+-- https://crypto.stanford.edu/~blynn/haskell/ad.html
+
+module examples.Test where
+
+import frege.prelude.Math hiding (sqr)
+--import Data.Number.Symbolic
+-- ACHTUNG ???FEHLER??? IN Zeile 94 in https://github.com/Frege/frege/blob/master/frege/prelude/PreludeBase.fr 
+dup a = (a, a)
+
+add = uncurry (+)
+
+scale = (*)
+
+mul = uncurry scale
+
+sqr = mul . dup
+
+cross f g (a, b) = (f a, g b)
+
+f /-\ g = cross f g . dup
+
+f \-/ g = add . cross f g
+
+lin f a = (f a, f)
+
+dId = lin id
+
+dDup = lin dup
+
+-- [dFst, dSnd, dAdd] = map lin [fst, snd, add]
+
+dFst = lin fst
+dSnd = lin snd
+dAdd = lin add
+
+dScale = lin . scale
+
+dConst n _ = (n, const 0)
+
+dCross f g ab = ((c, d), cross f' g') where
+  ((c, f'), (d, g')) = cross f g ab
+
+infixr 9 <.
+(g <. f) a = (c, g0 . f0) where
+  (b, f0) = f a
+  (c, g0) = g b
+
+dMul (a, b) = (a * b, scale b \-/ scale a)
+
+f >-< f' = f /-\ (scale . f')
+
+dExp = exp >-< exp
+
+recip x = 1.0 / x
+
+dLog = log >-< recip
+
+f </-\ g = dCross f g <. dDup
+
+dSqr = dMul <. dDup
+
+dxex = dMul <. (dId </-\ dExp)
+
+dSin   = sin >-< cos
+dCos   = cos >-< (negate . sin)
+dAsin  = asin >-< (\x -> recip (sqrt (1 - sqr x)))
+dAcos  = acos >-< (\x -> - recip (sqrt (1 - sqr x)))
+dAtan  = atan >-< (\x -> recip (sqr x + 1))
+dSinh  = sinh >-< cosh
+dCosh  = cosh >-< sinh
+dAsinh = asinh >-< (\x -> recip (sqrt (sqr x + 1)))
+dAcosh = acosh >-< (\x -> - recip (sqrt (sqr x - 1)))
+dAtanh = atanh >-< (\x -> recip (1 - sqr x))
+dPow (a, b) = (a ** b, scale (b * (a**(b - 1))) \-/ scale (log a * (a**b)))
+
+--dFifthPower = dPow <. (dId </-\ dConst 5)
+dMagSqr = dAdd <. dCross (dMul <. dDup) (dMul <. dDup)
+dCosSinProd = (dCos </-\ dSin) <. dMul
+-- examples
+-- (snd $ dSqr 5) 1
+-- (snd $ dSin 0) 1

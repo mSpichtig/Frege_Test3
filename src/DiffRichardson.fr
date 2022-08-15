@@ -1,0 +1,106 @@
+-- https://hackage.haskell.org/package/numeric-tools-0.2.0.1/docs/src/Numeric-Tools-Differentiation.html#diffRichardson
+
+module examples.DiffRichardson where
+
+--import frege.prelude.PreludeArrays
+import frege.control.monad.State
+
+
+data DiffRes = DiffRes { diffRes       :: Double -- ^ Derivative value
+                       , diffPrecision :: Double -- ^ Rough error estimate
+                       }
+derive Show DiffRes
+derive Eq DiffRes
+--derive Data DiffRes
+--derive Typeable DiffRes
+
+
+--replace :: ArrayElement a => ArrayOf b a -> Int -> Maybe a -> ST b (Maybe a) -- mit getAt
+--replace :: ArrayElement a => ArrayOf b a -> Int -> a -> ST b a -- mit getElemAt
+--replace :: STMutable s (JArray Double) -> Int -> ST s Double
+replace arr i x = do
+  x' <- getElemAt arr i
+  setElemAt arr i x
+  return x'
+
+
+tails' :: [a] -> [[a]]
+tails' [] = []
+tails' (x:xs) = (x : xs) : tails' xs
+
+diffRichardson :: (Double -> Double) -- ^ Function
+               -> Double             -- ^ Delta
+               -> Double             -- ^ Point at which evaluate differential
+               -> DiffRes   
+diffRichardson f h x0 = ST.run $ do
+  let nMax = 10
+      con = 1.4
+      con2 = con*con
+      safe = 2
+      arr = newArray nMax :: JArray Double
+  let worker i hh err ans = do
+    let richard j fac x err' ans' = do
+           xOld <- getElemAt arr (j-1)
+           setElemAt arr (j-1) x
+           case () of 
+              _| j>1        -> return (ans',err')
+               | otherwise  ->
+                 let x' = (x*fac - xOld) / (fac -1)
+                     errt = max (abs $ x' - x) (abs $ x' - xOld)
+                     (ans'',err'') = if errt < err' then (x',errt)
+                                                    else (ans',err')
+                 in richard (j+1) (fac*con2) x' err'' ans''
+    let hh'  = hh / con
+        d    = (f (x0 + hh') - f (x0 - hh')) / (2 * hh')
+    x'  <- getElemAt arr (i-1)
+    (ans',err') <- richard 1 con2 d err ans
+    x''  <- getElemAt arr i   
+    case () of 
+       _| abs (x' - x'') >= safe * err' -> return $ DiffRes ans' err'
+        | i >= nMax - 1                 -> return $ DiffRes ans' err'
+        | otherwise                     -> worker (i+1) hh' err' ans'
+  setElemAt arr 0 $ (f (x0 + h) - f (x0 -h)) / (2*h)
+  worker 1 h 1000000.0 -1000.0 
+  
+
+    
+{--
+diffRichardson :: (Double -> Double) -- ^ Function
+               -> Double             -- ^ Delta
+               -> Double             -- ^ Point at which evaluate differential
+               -> DiffRes
+diffRichardson f h x0 = runState $ do
+  let nMax = 10                 -- Maximum number of iterations
+  let con  = 1.4                -- Decrement for step size
+      con2 = con*con            -- Square of decrement
+  let safe = 2
+  -- Start calculations
+  let arr = (arrayFromList  (take nMax $ repeat 0.0)) --  newArray nMax 
+  let worker i hh err ans = do
+        -- Calculate extrapolations
+        let richard j fac x err' ans' = do
+              xOld = elemAt arr (j-1) -- <- replace arr (j-1) x
+              setAt arr (j-1) x
+              case () of
+                _| j > i     -> return (ans',err')
+                 | otherwise -> 
+                   let x'   = (x*fac - xOld) / (fac - 1)           -- New extrapolation
+                       errt = max (abs $ x' - x) (abs $ x' - xOld) -- New error estimate
+                       (ans'',err'') = if errt < err' then (x'   , errt)
+                                                      else (ans' , err')
+                   in richard (j+1) (fac*con2) x' err'' ans''
+        -- Main loop
+        let hh' = hh / con                                -- New step size
+            d   = (f (x0 + hh') - f (x0 - hh')) / (2 * hh') -- New approximation
+            x'  = elemAt arr (i-1)
+        (ans',err') <- richard 1 con2 d err ans
+        let x'' = elemAt arr i
+        case () of
+          _| abs (x' - x'') >= safe * err' -> return $ DiffRes ans' err'
+           | i >= nMax - 1                 -> return $ DiffRes ans' err'
+           | otherwise                     -> worker (i+1) hh' err' ans'
+  -- Calculate
+  setElemAt arr 0 $ (f (x0 + h) - f (x0 - h)) / (2*h)
+  worker 1 h 100000 0
+  
+--}

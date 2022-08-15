@@ -1,0 +1,77 @@
+module examples.DiffHughes where
+
+import frege.prelude.Math (log, round, sqrt)
+
+
+{--- 
+	Implementation of the numerical differentiation algorithms proposed by Hughes (1990; https://www.cs.kent.ac.uk/people/staff/dat/miranda/whyfp90.pdf).
+ 	Remarks on the warnings: They do not appear in the haskell-version of the program. I interpret the waring remarks in the following manner:
+ 	Frege does not a priori accept the respective arguments as infinite streams and prefers an addititional handling of the cases where the arguments would constitute a finite list.
+  	Commented out after the functions with warning remarks are a solution that rids the remarks (but type declarations have to be adapted for this approach to work).
+  
+  	Pivotal to the program is the function differentiate. This function generates a stream of difference quotients. In this stream, 
+   	the difference h between the x-values is halved from quotient to quotient. For example for the square root function,
+   	
+   	> within 0.01 (differentiate 0.5 sqrt 1) 
+   
+   	returns the first quotient of the stream (initialized with h = 0.5 and x = 1) that differs from its preceeding value by at most 0.01. 
+   	The function elimerror generates a stream of approximations of the previously discussed streams with faster convergence.
+   	The function improve is an optimized version of elimerror and the function super is an enhancement of improve. 
+-}
+main _ = do
+        putStrLn $ "within 0.01 (differentiate 1 sqrt 1) ergibt: " ++ show (within 0.01 (differentiate 1 sqrt 1))
+        putStrLn $ "within 0.01 (improve (differentiate 1 sqrt 1)) ergibt: " ++ show (within 0.01 (improve (differentiate 1 sqrt 1)))
+        putStrLn $ "within 0.01 (improve (improve (improve (differentiate 1 sqrt 1)))) ergibt: " ++ show (within 0.01 (improve (improve (improve (differentiate 1 sqrt 1)))))
+        putStrLn $ "within 0.01 (supPer (differentiate 1 sqrt 1)) ergibt: " ++ show (within 0.01 (supPer (differentiate 1 sqrt 1)))
+
+--- difference quotient of function f at value x + h and x
+easydiff :: Real a => (a -> a) -> a -> a -> a
+easydiff f x h = (f (x + h) - f x) / h
+
+halve :: Real a => a -> a
+halve x = x / 2
+
+{---
+	repEAT gegnerates the stream of the function composition chain a, f(a), f(f(a)), f(f(f(a))), ... 
+    Terminology deviation from Hughes (1990) as a prelude function called repeat already exists.
+    Furthermore, the prelude function iterate is synonymous enough to repEAT to function as a substitute. 
+-}
+repEAT :: (t -> t) -> t -> [t]
+repEAT f a = a : (repEAT f (f a))
+
+differentiate :: Real b => b -> (b -> b) -> b -> [b]
+--differentiate :: Double -> (Double -> Double) -> Double -> [Double]
+differentiate h0 f x = map (easydiff f x) (repEAT halve h0)
+
+within :: (Ord a, Num a) => a -> [a] -> a
+within eps (a:b:rest) = if abs (a-b) <= eps then b else (within eps (b:rest)) 
+--within eps (a:[]) = a -- ACHTUNG UNTERSCHIED ZU HASKELL
+--within eps [] = 0   -- ACHTUNG UNTERSCHIED ZU HASKELL
+
+elimerror :: (Real a, Integral t) => t -> [a] -> [a]
+elimerror n (a:b:rest) = (((b*2^n)-a)/(2^n - 1)):(elimerror n (b:rest)) 
+--elimerror n (a:[]) = [a] -- ACHTUNG UNTERSCHIED ZU HASKELL
+--elimerror n []  = [0.0]  -- ACHTUNG UNTERSCHIED ZU HASKELL
+
+--order :: (Real a, Integral b, Real_Float a) => [a] -> b
+order :: [Double] -> Long
+order (a:b:c:rest) = round (log2 ((a-c)/(b-c)-1))   -- ACHTUNG, round rundet z.B. 100.5 auf 100 ab!
+--order (a:b:[]) = round a
+--order (a:[]) = round a
+--order [] =0
+
+--log2 :: (Double a) => a -> a
+log2 :: Math.Floating a => a -> Double
+log2 x = log x / log 2  
+
+improve :: [Double] -> [Double]
+improve s = elimerror (order s) s
+
+second :: [a] -> a
+second (a:b:rest) = b
+--second (a:[]) = a
+--second [] = 0.0
+
+--- Deviating terminology because of a errormessage caused by term super (the two other fregec.jar versions I used do not show this errormessage)
+supPer :: [Double] -> [Double]
+supPer s = map second (repEAT improve s)

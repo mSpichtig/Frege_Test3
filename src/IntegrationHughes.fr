@@ -1,0 +1,79 @@
+module examples.Integrate where
+
+import frege.prelude.Math (log, round, sqrt)
+import examples.DiffHughes hiding (main)
+
+{---
+	Implementation of the numerical integration algorithms proposed by Hughes (1990; https://www.cs.kent.ac.uk/people/staff/dat/miranda/whyfp90.pdf).
+ 	Remarks on the warnings: They do not appear in the haskell-version of the program. I interpret the waring remarks in the following manner:
+ 	Frege does not a priori accept the respective arguments as infinite streams and prefers an addititional handling of the cases where the arguments would constitute a finite list.
+  	Commented out after the functions with warning remarks are a solution that rids the remarks (but type declarations have to be adapted for this approach to work).
+  
+  	Pivotal to the program is the function integrate2. This function generates a stream of approximations of the integral using the trapez rule. In this stream, 
+   	the number n of segments of theintegrated interval [a, b] is doubled from element to element. For example for the square root function,
+   	
+   	> within 0.01 (integrate2 sqrt 0 1) 
+   
+   	returns the first approximation value of the stream (initialized a = 0 and b = 1) that differs from its preceeding value by at most 0.01. 
+   	The function elimerror generates a stream of approximations of the previously discussed streams with faster convergence.
+   	The function improve is an optimized version of elimerror and the function super is an enhancement of improve. 
+   
+-}
+
+main _ = do
+        putStrLn $ "within 0.01 (integrate sqrt 0 1) ergibt: " ++ show (within 0.01 (integrate sqrt 0 1))
+        putStrLn $ "within 0.01 (improve (integrate sqrt 0 1))) ergibt: " ++ show (within 0.01 (improve (integrate sqrt 0 1)))
+        putStrLn $ "within 0.01 (improve (improve (improve (integrate sqrt 0 1)))) ergibt: " ++ show (within 0.01 (improve (improve (improve (integrate sqrt 0 1)))))
+        putStrLn $ "within 0.01 (super (integrate sqrt 0 1))) ergibt: " ++ show (within 0.01 (supPer (integrate sqrt 0 1)))
+        putStrLn $ "within 0.01 (integrate2 sqrt 0 1) ergibt: " ++ show (within 0.01 (integrate2 sqrt 0 1))
+        putStrLn $ "within 0.01 (improve (integrate2 sqrt 0 1))) ergibt: " ++ show (within 0.01 (improve (integrate2 sqrt 0 1)))
+        putStrLn $ "within 0.01 (improve (improve (improve (integrate2 sqrt 0 1)))) ergibt: " ++ show (within 0.01 (improve (improve (improve (integrate2 sqrt 0 1)))))
+        putStrLn $ "within 0.01 (super (integrate2 sqrt 0 1))) ergibt: " ++ show (within 0.01 (supPer (integrate2 sqrt 0 1)))
+
+
+
+
+easyintegrate :: (Double -> Double) -> Double -> Double -> Double
+easyintegrate f a b = (f a + f b) *(b-a)/2
+
+addpair :: Num a => (a,a) -> a
+addpair (a,b) = a + b
+
+-- This function could be replaced with the library function zip (The original is left as this code is a translation of Hughes (1990))
+zip2 :: [a] -> [b] -> [(a,b)]
+zip2 (a:restA) (b:restB) = (a,b):(zip2 restA restB)
+
+integrate :: (Double->Double) -> Double -> Double -> [Double]
+integrate f a b = (easyintegrate f a b) : (map addpair (zip2 (integrate f a mid) (integrate f mid b)))
+    where
+      mid = (a + b)/2
+
+integ :: (Double->Double) -> Double -> Double -> Double -> Double -> [Double]
+integ f a b fa fb = ((fa + fb)*(b-a)/2):(map addpair (zip2 (integ f a m fa fm) (integ f m b fm fb)))
+    where
+      m = (a+b)/2
+      fm = f m
+
+integrate2 :: (Double->Double) -> Double -> Double -> [Double]
+integrate2 f a b = integ f a b (f a) (f b)
+
+relative :: Double -> [Double] -> Double
+relative eps (a:b:rest) = if abs (a/b-1) <= eps then b else (relative eps (b:rest))
+
+--repEAT f a = a : (repEAT f (f a))
+
+--within eps (a:b:rest) = if abs (a-b) <= eps then b else (within eps (b:rest))
+
+
+--elimerror n (a:b:rest) = (((b*2^n)-a)/(2^n - 1)):(elimerror n (b:rest)) 
+
+--order (a:b:c:rest) = round (log2 ((a-c)/(b-c)-1))   -- ACHTUNG, round rundet z.B. 100.5 auf 100 ab!
+
+--log2 x = log x / log 2  
+
+--improve s = elimerror (order s) s
+
+--second (a:b:rest) = b
+
+--supPer s = map second (repEAT improve s)
+

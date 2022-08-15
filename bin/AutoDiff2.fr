@@ -1,0 +1,171 @@
+
+
+module examples.AutoDiff2 where
+
+import Java.lang.Math as J public()
+
+
+
+
+infixr 15  `**`-- `***`
+
+{--- Automatic differentiation based on the code example of https://www.danielbrice.net/blog/automatic-differentiation-is-trivial-in-haskell/
+	The example of Daniel Brice works with lambda function
+
+	> differentiateDual . (\x -> x ** 3 - sin (x ** 2)) $ Dual 2 1
+
+	If a function of type Dual -> Dual is required, the following approach works
+
+	>  z x = x ** (Dual 3 0) - sin (x ** (Dual 2 0))
+	> z (Dual 2 1)
+	
+-}
+
+(**) = pow
+
+data Dual = Dual Double Double
+--derive Read Dual
+derive Show Dual
+derive Eq Dual
+
+constantDual :: Double -> Dual
+-- ^ Lifts a constant number to the `Dual` type.
+constantDual x = Dual x 0
+
+seedDual :: Double -> Double -> Dual
+-- ^ Creates a Dual number.
+seedDual x x' = Dual x x'
+
+evaluateDual :: Dual -> Double
+-- ^ Used to evaluate a function.
+evaluateDual (Dual x _) = x
+
+differentiateDual :: Dual -> Double
+-- ^ Used to evaluate the derivative of a function.
+differentiateDual (Dual _ x') = x'
+
+--(***) :: Dual -> Double -> Dual
+--(***) (Dual u u') n = Dual (u J.** n) (n * (u J.** (n-1)) * u' )
+
+instance Num Dual where 
+  (+) (Dual u u') (Dual v v') = Dual (u + v) (u' + v')
+  (*) (Dual u u') (Dual v v') = Dual (u * v) (u' * v + u * v')
+  -- ACHTUNG ???FEHLER??? IN Zeile 94 in https://github.com/Frege/frege/blob/master/frege/prelude/PreludeBase.fr 
+  (Dual u u') - (Dual v v') = Dual (u - v) (u' - v')
+  fromInteger n               = Dual (fromInteger n) 0
+  fromInt n                   = Dual (fromInt n) 0
+  one                         = Dual 1 0
+  zero                        = Dual 0 0
+  (Dual u u') <=> (Dual v v')
+    | u > v = GT
+    | u < v = LT
+    | otherwise = EQ
+  
+instance Real Dual where
+  (/) (Dual u u') (Dual v v') = Dual (u / v) ((u' * v - u * v') / (v * v))
+  positiveInfinity  = Dual positiveInfinity 0    -- für frege-repl muss ich es auskommentieren
+  negativeInfinity  = Dual negativeInfinity 0    -- für frege-repl muss ich es auskommentieren
+  fromDouble n      = Dual (fromDouble n) 0
+  nan               = Dual (nan) 0               -- für frege-repl muss ich es auskommentieren
+ 
+class  Real r => Floating r where
+    --- The value that is closer than any other to @pi@, the ratio of the circumference of a circle to its diameter.
+--    pi                  ∷ r
+
+    --- Returns the arc sine of a value; the returned angle is in the range -'pi'/2 through 'pi'/2.
+    asin                ∷ r → r
+
+    --- Returns the arc cosine of a value; the returned angle is in the range 0.0 through 'pi'.
+    acos                ∷ r → r
+
+    --- Returns the arc tangent of a value; the returned angle is in the range -'pi'/2 through 'pi'/2.
+    atan                ∷ r → r
+
+    --- Returns the natural logarithm (base 'e') of a value.
+    log                 ∷ r → r
+
+    --- Returns the trigonometric cosine of an angle.
+    cos                 ∷ r → r
+
+    --- Returns the hyperbolic cosine of a floating point value.
+    cosh                ∷ r → r
+
+    --- Returns Euler's number 'e' raised to the power of a floating-point value. 
+    exp                 ∷ r → r
+
+    --- Returns the logarithm of the second argument to the base given by the first argument. 
+    logBase             ∷ r → r → r
+
+    --- Returns the value of the first argument raised to the power of the second argument.
+    pow                 ∷ r → r → r
+
+
+    --- Returns the trigonometric sine of an angle.
+    sin                 ∷ r → r
+
+    --- Returns the hyperbolic sine of a value.
+    sinh                ∷ r → r
+
+    --- Returns the correctly roud positive square root of a value.
+    sqrt                ∷ r → r
+
+    --- Returns the trigonometric tangent of an angle.
+    tan                 ∷ r → r
+
+    --- Returns the hyperbolic tangent of a floating point value.
+    tanh                ∷ r → r
+
+    --- Inverse hyperbolic function for 'sinh'
+    asinh               ∷ r → r
+
+    --- Inverse hyperbolic function for 'cosh'
+    acosh               ∷ r → r
+
+    --- Inverse hyperbolic function for 'tanh'
+    atanh               ∷ r → r
+    
+ --   pown                :: r -> Double -> r
+  --  logBase x y         =  log y / log x
+
+
+                      
+instance Real Dual => Floating Dual where
+--  pi                = Dual J.pi 0
+  exp (Dual u u')   = Dual (J.exp u) (u' * J.exp u)
+  sqrt (Dual u u')  = Dual (J.sqrt u) (u' / (2 * J.sqrt u))
+  log (Dual u u')   = Dual (J.log u) (u' / u)
+  sin (Dual u u')   = Dual (J.sin u) (u' * J.cos u)
+  cos (Dual u u')   = Dual (J.cos u) (- u' * J.sin u)
+  tan (Dual u u')   = Dual (J.tan u) (u' / ((J.cos u) * (J.cos u))) -- ACHTUNG Fehler
+  asin (Dual u u')  = Dual (J.asin u) (u' / (J.sqrt(1 - u * u)))
+  acos (Dual u u')  = Dual (J.acos u) (- u' / (J.sqrt(1 - u * u)))
+  atan (Dual u u')  = Dual (J.atan u) (u' / (1 + u * u))
+  sinh (Dual u u')  = Dual (J.sinh u) (u' * J.cosh u)
+  cosh (Dual u u')  = Dual (J.cosh u) (u' * J.sinh u)
+  tanh (Dual u u')  = Dual (J.tanh u) (u' * (1 - (J.tanh u) * (J.tanh u)))
+  asinh (Dual u u') = Dual (J.log (u + J.sqrt (1.0 +u*u))) (u' / (J.sqrt(1 + u * u)))
+  acosh (Dual u u') = Dual (J.log (u + (u+1.0) * J.sqrt ((u -1.0)/(u + 1.0)))) (u' / (J.sqrt(u * u - 1)))
+  atanh (Dual u u') = Dual (0.5 * J.log((1.0 +u) / (1.0 - u))) (u' / (1 - u * u))
+  logBase (Dual u u') (Dual v v') = Dual (J.log u / J.log v) (((J.log v) * u' / u - (J.log u) * v' / v) / ((J.log u) * (J.log u)))
+  pow (Dual u u') (Dual v v')  = Dual (u J.** v) (u J.** v * (v' * (J.log u) + (v * u' / u)))
+--  pown (Dual u u') n = Dual (u J.** n) (n * (u J.** (n-1)) * u' )
+
+instance Real Double => Floating Double where 
+--  pi                = Dual J.pi 0
+  exp  = J.exp
+  sqrt = J.sqrt
+  log  = J.log
+  sin  = J.sin
+  cos  = J.cos
+  tan  = J.tan
+  asin = J.asin
+  acos = J.acos
+  atan = J.atan
+  sinh = J.sinh
+  cosh = J.cosh
+  tanh = J.tanh
+  asinh u = J.log (u + J.sqrt (1.0 +u*u))
+  acosh u = J.log (u + (u+1.0) * J.sqrt ((u -1.0)/(u + 1.0)))
+  atanh u = (0.5 * J.log((1.0 +u) / (1.0 - u)))
+  logBase u v = (J.log u / J.log v)
+  pow u v = (u J.** v)
